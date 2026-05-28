@@ -1,0 +1,10 @@
+{
+  "name": "recordplayer",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "tauri": "ui/node_modules/.bin/tauri",
+    "dev": "ui/node_modules/.bin/tauri dev",
+    "build": "ui/node_modules/.bin/tauri build"
+  }
+}

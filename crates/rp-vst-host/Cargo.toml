@@ -1,0 +1,11 @@
+[package]
+name = "rp-vst-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rp-core.workspace = true
+vst3.workspace = true
+thiserror.workspace = true
+dirs = "5.0"

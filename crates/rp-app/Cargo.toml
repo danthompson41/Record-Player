@@ -1,0 +1,15 @@
+[package]
+name = "rp-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rp-core.workspace = true
+rp-audio-engine.workspace = true
+rp-waveform.workspace = true
+rp-library.workspace = true
+symphonia.workspace = true
+tokio.workspace = true
+serde.workspace = true
+thiserror.workspace = true

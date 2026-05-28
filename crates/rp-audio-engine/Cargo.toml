@@ -1,0 +1,13 @@
+[package]
+name = "rp-audio-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rp-core.workspace = true
+cpal.workspace = true
+symphonia.workspace = true
+rubato.workspace = true
+rtrb.workspace = true
+thiserror.workspace = true

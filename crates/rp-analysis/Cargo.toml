@@ -1,0 +1,9 @@
+[package]
+name = "rp-analysis"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rp-core.workspace = true
+thiserror.workspace = true

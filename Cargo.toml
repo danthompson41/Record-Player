@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/rp-core",
+    "crates/rp-audio-engine",
+    "crates/rp-vst-host",
+    "crates/rp-waveform",
+    "crates/rp-analysis",
+    "crates/rp-library",
+    "crates/rp-app",
+    "src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Daniel Thompson"]
+
+[workspace.dependencies]
+# Core
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+
+# Audio
+cpal = "0.15"
+symphonia = { version = "0.5", features = ["mp3", "flac", "wav", "aac", "ogg", "vorbis"] }
+rubato = "0.15"
+rtrb = "0.3"
+
+# VST
+vst3 = "0.3"
+
+# Analysis
+aubio = "0.2"
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Async
+tokio = { version = "1.0", features = ["full"] }
+
+# Workspace crates
+rp-core = { path = "crates/rp-core" }
+rp-audio-engine = { path = "crates/rp-audio-engine" }
+rp-vst-host = { path = "crates/rp-vst-host" }
+rp-waveform = { path = "crates/rp-waveform" }
+rp-analysis = { path = "crates/rp-analysis" }
+rp-library = { path = "crates/rp-library" }
