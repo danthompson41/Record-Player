@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, DeckSnapshot, formatTime, SyncMode, Track } from '../api';
+import { api, DeckSnapshot, formatTime, Track } from '../api';
 import { Waveform } from './Waveform';
 import { Minimap } from './Minimap';
-import { Meter } from './Meter';
 import { BEGIN_COLOR, CUE_COLORS, textOn } from '../cueColors';
 
 // Loop lengths as bar fractions → beats (1 bar = 4 beats).
@@ -25,6 +24,7 @@ interface DeckProps {
   track: Track | null;
   snapshot: DeckSnapshot | undefined;
   globalBpm: number;
+  synced: boolean;
   onLoad: () => void;
 }
 
@@ -35,12 +35,9 @@ export function Deck({
   track,
   snapshot,
   globalBpm,
+  synced,
   onLoad,
 }: DeckProps) {
-  const [volume, setVolume] = useState(100);
-  const [pitch, setPitch] = useState(0); // percent, -50..50
-  const [sync, setSync] = useState<SyncMode>('off');
-  const [eq, setEq] = useState({ low: 1, mid: 1, high: 1 });
   const [bpm, setBpm] = useState<string>('');
   const [firstBeat, setFirstBeat] = useState(0);
   // Zoom = visible window width in samples (0 → whole track). The window itself
@@ -241,31 +238,10 @@ export function Deck({
     }
   };
 
-  const synced = sync !== 'off';
-  // Effective playback ratio: driven by the engine when synced, else manual.
-  const effectivePitch = synced ? snapshot?.pitch ?? 1 : 1 + pitch / 100;
+  // Pitch ratio is driven by the engine when synced; otherwise the manual
+  // slider lives in the central Mixer (so no local readout here).
+  const effectivePitch = synced ? snapshot?.pitch ?? 1 : 1;
   const pitchPercent = ((effectivePitch - 1) * 100).toFixed(1);
-
-  const onVolume = (v: number) => {
-    setVolume(v);
-    api.setDeckVolume(deckId, v / 100);
-  };
-
-  const onPitch = (p: number) => {
-    setPitch(p);
-    api.setDeckPitch(deckId, 1 + p / 100);
-  };
-
-  const onSync = (mode: SyncMode) => {
-    setSync(mode);
-    api.setDeckSync(deckId, mode);
-  };
-
-  const onEq = (band: 'low' | 'mid' | 'high', value: number) => {
-    const next = { ...eq, [band]: value };
-    setEq(next);
-    api.setChannelEq(deckId, next.low, next.mid, next.high);
-  };
 
   const onBpm = (value: string) => {
     setBpm(value);
@@ -432,71 +408,6 @@ export function Deck({
         <button className="btn outline" onClick={onLoad}>
           Load…
         </button>
-      </div>
-
-      <div className="deck-body">
-        <div className="sliders">
-          <label className="slider-row">
-            <span>Vol</span>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={volume}
-              onChange={(e) => onVolume(Number(e.target.value))}
-            />
-            <span className="slider-val">{volume}</span>
-          </label>
-
-          <label className="slider-row">
-            <span>Pitch</span>
-            <input
-              type="range"
-              min={-50}
-              max={50}
-              value={pitch}
-              disabled={synced}
-              onChange={(e) => onPitch(Number(e.target.value))}
-            />
-            <span className="slider-val">
-              {synced ? `${pitchPercent}%` : `${pitch > 0 ? `+${pitch}` : pitch}%`}
-            </span>
-          </label>
-
-          <div className="eq">
-            {(['low', 'mid', 'high'] as const).map((band) => (
-              <label key={band} className="eq-band">
-                <input
-                  type="range"
-                  min={0}
-                  max={2}
-                  step={0.01}
-                  value={eq[band]}
-                  onChange={(e) => onEq(band, Number(e.target.value))}
-                />
-                <span>{band.toUpperCase()}</span>
-              </label>
-            ))}
-          </div>
-
-          <div className="sync-row">
-            {(['off', 'tempo', 'phase'] as const).map((mode) => (
-              <button
-                key={mode}
-                className={`sync-btn ${sync === mode ? 'active' : ''}`}
-                onClick={() => onSync(mode)}
-                title={mode === 'off' ? 'Free pitch' : 'Match global BPM'}
-              >
-                {mode === 'off' ? 'off' : mode === 'tempo' ? 'sync' : 'phase'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="deck-meters">
-          <Meter level={snapshot?.peak_left ?? 0} />
-          <Meter level={snapshot?.peak_right ?? 0} />
-        </div>
       </div>
 
       <Minimap

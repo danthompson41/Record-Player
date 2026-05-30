@@ -52,7 +52,7 @@ body {
   overflow: auto;
 }
 
-.decks-container {
+.deck-row {
   display: flex;
   gap: 16px;
   flex: 1;
@@ -438,42 +438,6 @@ input[type='range']:disabled {
   margin-left: auto;
 }
 
-.deck-body {
-  display: flex;
-  gap: 12px;
-  flex: 1;
-}
-
-.sliders {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  justify-content: center;
-}
-
-.slider-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.slider-row > span:first-child {
-  width: 44px;
-}
-
-.slider-row input[type='range'] {
-  flex: 1;
-}
-
-.slider-val {
-  width: 52px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
 input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
@@ -492,43 +456,14 @@ input[type='range']::-webkit-slider-thumb {
   cursor: pointer;
 }
 
-.eq {
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-  padding: 4px 0;
-}
-
-.eq-band {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.eq-band input[type='range'] {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  width: 6px;
-  height: 46px;
-}
-
-.sync-row {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-}
-
 .sync-btn {
   background: #2a2a44;
   border: none;
   color: var(--muted);
-  padding: 5px 12px;
-  border-radius: 6px;
+  padding: 4px 8px;
+  border-radius: 5px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
 }
 
@@ -538,8 +473,8 @@ input[type='range']::-webkit-slider-thumb {
   font-weight: 600;
 }
 
-.deck-meters,
-.master-meters {
+.master-meters,
+.strip-meters {
   display: flex;
   gap: 4px;
 }
@@ -564,33 +499,135 @@ input[type='range']::-webkit-slider-thumb {
 /* Mixer ------------------------------------------------------------------- */
 
 .mixer {
+  width: 280px;
+  flex-shrink: 0;
   background: var(--panel);
   border-radius: 12px;
-  padding: 16px;
+  padding: 14px 12px;
   display: flex;
-  align-items: center;
-  gap: 32px;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
 }
 
-.mixer-section {
+.mixer-strips {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  min-height: 0;
+}
+
+.mixer-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 10px 8px;
+  min-height: 0;
+}
+
+.strip-label {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-align: center;
+  height: 18px;
+}
+
+.strip-sync {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  align-items: stretch;
+  height: 72px;
+}
+
+.strip-sync .sync-btn {
+  padding: 3px 4px;
+}
+
+.strip-pitch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 36px;
+}
+
+.strip-pitch input[type='range'] {
+  width: 100%;
+}
+
+.strip-pitch-val {
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.strip-eq {
+  display: flex;
+  justify-content: space-around;
+  align-items: flex-end;
+  gap: 6px;
+  width: 100%;
+  height: 96px;
+}
+
+.eq-vertical {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.eq-vertical input[type='range'] {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 6px;
+  height: 70px;
+}
+
+/* Empty rows in the master strip — same heights as channel rows so the master
+   fader/meters line up horizontally with the channel faders/meters. */
+.strip-placeholder {
+  visibility: hidden;
+}
+
+.strip-fader {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  height: 160px;
+  padding: 4px 0;
+}
+
+input[type='range'].vol-fader {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 8px;
+  height: 100%;
+}
+
+.strip-meters {
+  height: 100%;
+}
+
+.crossfader-row {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.crossfader-section {
-  flex: 1;
-}
-
-.mixer-section:nth-child(2) {
-  flex: 1;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-}
-
 .mixer-label {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--muted);
   font-weight: 600;
 }
@@ -605,10 +642,6 @@ input[type='range']::-webkit-slider-thumb {
   height: 22px;
   background: white;
   border-radius: 4px;
-}
-
-.master-meters {
-  height: 60px;
 }
 
 /* Transport bar ----------------------------------------------------------- */
