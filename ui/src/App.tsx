@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, SyncMode, Track } from './api';
 import { useEngineState } from './useEngineState';
 import { Deck } from './components/Deck';
@@ -22,7 +22,7 @@ const EMPTY_DECK: DeckUi = { track: null };
 const DEFAULT_CHANNEL: ChannelState = {
   volume: 100,
   pitch: 0,
-  sync: 'off',
+  sync: 'tempo',
   eq: { low: 1, mid: 1, high: 1 },
 };
 
@@ -40,6 +40,13 @@ export function App() {
   ]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Push UI defaults to the engine on mount (the engine starts with sync off,
+  // so we have to send the initial sync mode for it to match the UI).
+  useEffect(() => {
+    api.setDeckSync(0, DEFAULT_CHANNEL.sync);
+    api.setDeckSync(1, DEFAULT_CHANNEL.sync);
+  }, []);
 
   const setChannel = useCallback((id: number, partial: Partial<ChannelState>) => {
     setChannels((prev) => {

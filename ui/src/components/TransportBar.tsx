@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, EngineSnapshot, Quantize } from '../api';
 
 interface TransportBarProps {
@@ -10,10 +10,15 @@ const QUANTIZE_OPTIONS: Quantize[] = ['off', 'beat', 'bar'];
 export function TransportBar({ snapshot }: TransportBarProps) {
   const [tempo, setTempo] = useState(120);
   const [metronome, setMetronome] = useState(false);
-  const [quantize, setQuantize] = useState<Quantize>('off');
+  const [quantize, setQuantize] = useState<Quantize>('bar');
 
   const beatInBar = snapshot?.beat_in_bar ?? 0;
   const beatPhase = snapshot?.beat_phase ?? 0;
+
+  // Sync the UI's initial quantize value down to the engine on mount.
+  useEffect(() => {
+    api.setQuantize('bar');
+  }, []);
 
   const onTempo = (v: number) => {
     setTempo(v);
