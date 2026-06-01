@@ -7,7 +7,19 @@ use crate::{
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Stream, StreamConfig};
 use rp_core::{DeckId, PlaybackState, Quantize, RecordPlayerError, Result};
+use rp_link::{LinkAudio, LinkAudioSink, SessionState};
 use std::sync::{Arc, Mutex};
+
+/// Link "quantum" — the bar length in beats that all peers agree on for phase
+/// alignment. 4 matches our 4/4 grid and our existing beat-in-bar UI.
+const LINK_QUANTUM: f64 = 4.0;
+
+/// Offset (in beats, must be a multiple of `LINK_QUANTUM`) added to Link's
+/// beat timeline before mapping it back into our `u64` `sample_position`.
+/// Link's beat-at-time can be slightly negative just after creation; this
+/// offset keeps the converted sample position well into positive territory
+/// without disturbing the bar phase used by the UI.
+const LINK_BEAT_OFFSET: f64 = 4096.0; // 1024 bars
 
 /// A short percussive click voice for the metronome. A single sine burst with a
 /// linear decay, retriggered on every beat. Cheap enough to run in the audio
@@ -74,6 +86,23 @@ impl Metronome {
 
 /// The main audio engine that manages playback
 pub struct AudioEngine {
+    // Drop order matters: `link_sinks` must drop before `link` (the sinks hold
+    // raw handles that are only valid while LinkAudio is alive). Rust drops
+    // fields in declaration order, so sinks come first.
+    /// Per-deck LinkAudio sinks (broadcast). `None` until the device sample
+    /// rate is known and the sinks have been created.
+    link_sinks: [Option<LinkAudioSink>; 4],
+    /// Scratch buffers for the f32→i16 conversion handed to LinkAudio. Sized
+    /// to the largest cpal block we've seen.
+    link_pcm_scratch: [Vec<i16>; 4],
+    /// Pre-allocated Link session state. Created off the audio thread (the C
+    /// API rejects construction from the audio thread); reused every block.
+    link_state: SessionState,
+    /// Shared handle to the LinkAudio instance — same `Arc` is held by the UI
+    /// thread (AppState) so it can toggle enable/disable without going through
+    /// the command channel.
+    link: Arc<LinkAudio>,
+
     /// Global transport for sync
     transport: Arc<GlobalTransport>,
     /// The four decks
@@ -95,9 +124,17 @@ pub struct AudioEngine {
 }
 
 impl AudioEngine {
-    /// Create a new audio engine
-    pub fn new(sample_rate: u32) -> Self {
+    /// Create a new audio engine. The `link` argument is shared with the UI
+    /// thread (see `AppState` in `src-tauri/src/main.rs`) so the UI can
+    /// enable/disable Link directly. Link Audio sinks are created later in
+    /// `set_output_sample_rate` once the device block size is known.
+    pub fn new(sample_rate: u32, link: Arc<LinkAudio>) -> Self {
         Self {
+            link_sinks: [const { None }; 4],
+            link_pcm_scratch: [const { Vec::new() }; 4],
+            link_state: SessionState::new(),
+            link,
+
             transport: Arc::new(GlobalTransport::new(sample_rate)),
             decks: [
                 Deck::new(DeckId::DECK_A),
@@ -122,12 +159,33 @@ impl AudioEngine {
 
     /// Adopt the real output device sample rate, propagating it to the clock,
     /// the metronome, and every deck so timing and resampling are correct.
+    /// Also creates the per-deck LinkAudio sinks now that we know the device
+    /// block-size class (sink creation is not realtime-safe and must happen
+    /// before the audio thread is running).
     pub fn set_output_sample_rate(&mut self, sample_rate: u32) {
         self.transport.set_sample_rate(sample_rate);
         self.metronome.set_sample_rate(sample_rate);
         self.mixer.set_sample_rate(sample_rate);
         for deck in &mut self.decks {
             deck.set_output_sample_rate(sample_rate);
+        }
+
+        // Create one Link Audio sink per deck. `MAX_BLOCK_SAMPLES` is generous
+        // (8192 i16 = 4096 stereo frames, ≈85 ms at 48 kHz) so any realistic
+        // cpal buffer fits without us having to grow the pool at runtime.
+        const MAX_BLOCK_SAMPLES: usize = 8192;
+        const DECK_NAMES: [&str; 4] = [
+            "recordplayer Deck A",
+            "recordplayer Deck B",
+            "recordplayer Deck C",
+            "recordplayer Deck D",
+        ];
+        for d in 0..4 {
+            if self.link_sinks[d].is_none() {
+                self.link_sinks[d] =
+                    Some(LinkAudioSink::new(&self.link, DECK_NAMES[d], MAX_BLOCK_SAMPLES));
+                self.link_pcm_scratch[d] = vec![0i16; MAX_BLOCK_SAMPLES];
+            }
         }
     }
 
@@ -165,7 +223,19 @@ impl AudioEngine {
         match cmd {
             Command::Play => self.transport.play(),
             Command::Stop => self.transport.stop(),
-            Command::SetTempo(bpm) => self.transport.set_tempo_bpm(bpm),
+            Command::SetTempo(bpm) => {
+                // With Link enabled, the local clock is reseeded from Link
+                // every block — push tempo changes to the session so peers
+                // follow them. The transport will pick up the new tempo on
+                // the next render block's Link capture.
+                if self.link.is_enabled() {
+                    let host_us = self.link.clock_micros();
+                    self.link_state.set_tempo(bpm, host_us);
+                    self.link.commit_audio_session_state(&self.link_state);
+                } else {
+                    self.transport.set_tempo_bpm(bpm);
+                }
+            }
 
             Command::DeckLoad(id, audio) => {
                 let d = id.0 as usize;
@@ -263,6 +333,34 @@ impl AudioEngine {
 
     /// Render audio samples. Called from the audio callback.
     pub fn render(&mut self, output: &mut [f32], frames: usize) {
+        // ─── Adopt Link timeline (must happen BEFORE process_commands so any
+        // SetTempo command sees the freshly-captured session_state) ──────────
+        //
+        // When Link is enabled the GlobalTransport stops being a free-running
+        // counter — every block we re-derive its tempo and sample_position
+        // from the captured Link session state. Downstream beat/bar math and
+        // the quantize/pending_play/pending_seek machinery then "just works"
+        // against the reseeded clock without any further changes.
+        let link_enabled = self.link.is_enabled();
+        let link_host_us = if link_enabled {
+            let host_us = self.link.clock_micros();
+            self.link.capture_audio_session_state(&mut self.link_state);
+            let bpm = self.link_state.tempo();
+            self.transport.set_tempo_bpm(bpm);
+            // Map Link beats → our u64 sample_position. The offset is a
+            // multiple of LINK_QUANTUM so bar phase (what the UI shows) is
+            // preserved across the conversion.
+            let sr = self.transport.sample_rate() as f64;
+            let spb = sr * 60.0 / bpm;
+            let beat = self.link_state.beat_at_time(host_us, LINK_QUANTUM);
+            let positive_beat = (beat + LINK_BEAT_OFFSET).max(0.0);
+            self.transport
+                .set_sample_position((positive_beat * spb).round() as u64);
+            Some(host_us)
+        } else {
+            None
+        };
+
         // Process any pending commands
         self.process_commands();
 
@@ -330,6 +428,53 @@ impl AudioEngine {
             }
 
             self.decks[d].render(&mut deck_scratch[d], frames);
+        }
+
+        // ─── Broadcast per-deck audio over Link Audio ────────────────────────
+        //
+        // Each deck publishes its post-resample / post-pitch / post-volume
+        // stereo signal to its own LinkAudio channel. The mixer's per-channel
+        // EQ/filter/crossfader/master are NOT applied — peers receive the raw
+        // deck output, which mirrors a traditional booth/PFL feed. Idle (no
+        // remote subscriber) is cheap: `retain_buffer` returns None and we
+        // bail out without converting samples.
+        if link_enabled && self.link.is_link_audio_enabled() {
+            if let Some(host_us) = link_host_us {
+                let beats_at_buffer_begin =
+                    self.link_state.beat_at_time(host_us, LINK_QUANTUM);
+                let sample_rate = self.transport.sample_rate();
+                for d in 0..4 {
+                    let Some(sink) = self.link_sinks[d].as_ref() else {
+                        continue;
+                    };
+                    let Some(mut buf) = sink.retain_buffer() else {
+                        continue; // no remote source subscribed
+                    };
+                    let needed = frames * 2;
+                    let max = buf.max_num_samples().min(self.link_pcm_scratch[d].len());
+                    if needed > max {
+                        // Cpal handed us a larger block than our pool — skip
+                        // this block rather than truncate misaligned audio.
+                        continue;
+                    }
+                    let dst = &mut self.link_pcm_scratch[d][..needed];
+                    for (i, s) in deck_scratch[d][..needed].iter().enumerate() {
+                        // f32 [-1, 1] → i16 with saturation. 32767 (not 32768)
+                        // on the negative side mirrors libsndfile/cpal’s convention.
+                        let clamped = s.clamp(-1.0, 1.0);
+                        dst[i] = (clamped * 32767.0) as i16;
+                    }
+                    buf.samples()[..needed].copy_from_slice(dst);
+                    let _ = buf.commit(
+                        &self.link_state,
+                        beats_at_buffer_begin,
+                        LINK_QUANTUM,
+                        frames,
+                        2,
+                        sample_rate,
+                    );
+                }
+            }
         }
 
         // Mix decks and overlay the metronome, frame by frame.
@@ -419,6 +564,9 @@ impl AudioEngine {
                 master_peaks: [self.mixer.master_peak_left, self.mixer.master_peak_right],
                 crossfader_xy: [self.mixer.crossfader_x, self.mixer.crossfader_y],
             },
+            link_enabled: self.link.is_enabled(),
+            link_audio_enabled: self.link.is_link_audio_enabled(),
+            link_peers: self.link.num_peers(),
         }
     }
 

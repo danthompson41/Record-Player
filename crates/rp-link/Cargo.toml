@@ -1,0 +1,15 @@
+[package]
+name = "rp-link"
+version.workspace = true
+edition.workspace = true
+license = "GPL-2.0-or-later"
+description = "Ableton Link 4 bindings (vendored from rusty_link link_4 branch) with LinkAudio sink extensions for recordplayer."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+
+[build-dependencies]
+cmake = "0.1"
+bindgen = "0.70"

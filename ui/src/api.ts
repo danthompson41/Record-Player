@@ -27,6 +27,12 @@ export interface EngineSnapshot {
   master_left: number;
   master_right: number;
   decks: DeckSnapshot[];
+  /** Ableton Link: tempo/phase sync engaged. */
+  link_enabled: boolean;
+  /** Ableton Link: per-deck audio broadcast engaged. */
+  link_audio_enabled: boolean;
+  /** Ableton Link: number of remote peers in the session. */
+  link_peers: number;
 }
 
 export type Quantize = 'off' | 'beat' | 'bar';
@@ -102,6 +108,9 @@ export const api = {
   setTempo: (bpm: number) => invoke('set_tempo', { bpm }),
   setMetronome: (enabled: boolean) => invoke('set_metronome', { enabled }),
   setQuantize: (mode: Quantize) => invoke('set_quantize', { mode }),
+  setLinkEnabled: (enabled: boolean) => invoke('set_link_enabled', { enabled }),
+  setLinkAudioEnabled: (enabled: boolean) =>
+    invoke('set_link_audio_enabled', { enabled }),
 };
 
 /** Format a sample count into mm:ss given a sample rate. */

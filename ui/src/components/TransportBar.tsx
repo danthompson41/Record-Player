@@ -14,6 +14,19 @@ export function TransportBar({ snapshot }: TransportBarProps) {
 
   const beatInBar = snapshot?.beat_in_bar ?? 0;
   const beatPhase = snapshot?.beat_phase ?? 0;
+  // Link state lives on the engine snapshot — toggles dispatch and trust the
+  // next poll for confirmation instead of holding a separate optimistic copy.
+  const linkEnabled = snapshot?.link_enabled ?? false;
+  const linkAudioEnabled = snapshot?.link_audio_enabled ?? false;
+  const linkPeers = snapshot?.link_peers ?? 0;
+
+  // Mirror the engine's authoritative BPM into the input while Link is engaged
+  // — peers can change the tempo and we want the slider to follow.
+  useEffect(() => {
+    if (linkEnabled && snapshot?.tempo) {
+      setTempo(snapshot.tempo);
+    }
+  }, [linkEnabled, snapshot?.tempo]);
 
   // Sync the UI's initial quantize value down to the engine on mount.
   useEffect(() => {
@@ -34,6 +47,19 @@ export function TransportBar({ snapshot }: TransportBarProps) {
   const onQuantize = (q: Quantize) => {
     setQuantize(q);
     api.setQuantize(q);
+  };
+
+  const onLink = () => {
+    api.setLinkEnabled(!linkEnabled);
+  };
+
+  const onLinkAudio = () => {
+    // LinkAudio only makes sense with the basic Link session running; enable
+    // both in one click so the user doesn't have to think about the order.
+    if (!linkEnabled) {
+      api.setLinkEnabled(true);
+    }
+    api.setLinkAudioEnabled(!linkAudioEnabled);
   };
 
   return (
@@ -87,6 +113,22 @@ export function TransportBar({ snapshot }: TransportBarProps) {
         title="Toggle audible metronome"
       >
         {metronome ? '🔊' : '🔇'} Metronome
+      </button>
+
+      <button
+        className={`link-toggle ${linkEnabled ? 'on' : ''}`}
+        onClick={onLink}
+        title="Ableton Link — share tempo and beat phase with peers on the LAN"
+      >
+        LINK{linkEnabled && linkPeers > 0 ? ` · ${linkPeers}` : ''}
+      </button>
+
+      <button
+        className={`link-audio-toggle ${linkAudioEnabled ? 'on' : ''}`}
+        onClick={onLinkAudio}
+        title="Link Audio — broadcast each deck as its own channel on the Link network"
+      >
+        LINK AUDIO
       </button>
     </div>
   );

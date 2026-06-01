@@ -6,7 +6,9 @@ use std::sync::{Arc, Mutex};
 use rp_app::AudioDecoder;
 use rp_audio_engine::commands::EngineState;
 use rp_audio_engine::deck::AudioBuffer;
-use rp_audio_engine::{command_channel, AudioEngine, Command, CommandSender, start_audio};
+use rp_audio_engine::{
+    command_channel, start_audio, AudioEngine, Command, CommandSender, LinkAudio, SessionState,
+};
 use rp_core::{AudioFormat, DeckId, Quantize, SyncMode, TrackId, TrackMetadata};
 use rp_library::TrackDatabase;
 use tauri::{AppHandle, Manager, State};
@@ -23,6 +25,10 @@ struct AppState {
     /// Decoded audio per deck (shared `Arc` with the audio thread, so no extra
     /// memory) used to compute waveform peaks over any sample range on demand.
     waveforms: Mutex<[Option<Arc<AudioBuffer>>; 4]>,
+    /// Shared LinkAudio instance — the same `Arc` is held by the audio engine.
+    /// UI-thread methods (enable, set_peer_name, app-thread tempo changes) go
+    /// through this handle without round-tripping the command channel.
+    link: Arc<LinkAudio>,
 }
 
 impl AppState {
@@ -65,6 +71,10 @@ struct EngineSnapshot {
     master_left: f32,
     master_right: f32,
     decks: Vec<DeckSnapshot>,
+    /// Ableton Link session state for the TransportBar.
+    link_enabled: bool,
+    link_audio_enabled: bool,
+    link_peers: u64,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -434,6 +444,9 @@ fn get_engine_state(state: State<AppState>) -> Result<EngineSnapshot, String> {
         master_left: s.mixer.master_peaks[0],
         master_right: s.mixer.master_peaks[1],
         decks,
+        link_enabled: s.link_enabled,
+        link_audio_enabled: s.link_audio_enabled,
+        link_peers: s.link_peers,
     })
 }
 
@@ -581,7 +594,31 @@ fn set_master_gain(gain: f32, state: State<AppState>) -> Result<(), String> {
 
 #[tauri::command]
 fn set_tempo(bpm: f64, state: State<AppState>) -> Result<(), String> {
+    // When Link is enabled the local clock is reseeded from the session every
+    // block, so the only durable place to write a new tempo is into the Link
+    // session itself. capture_app_session_state / commit_app_session_state are
+    // designed for non-audio-thread callers (Realtime-safe: no), which is
+    // exactly this Tauri command thread.
+    if state.link.is_enabled() {
+        let mut s = SessionState::new();
+        state.link.capture_app_session_state(&mut s);
+        s.set_tempo(bpm, state.link.clock_micros());
+        state.link.commit_app_session_state(&s);
+        return Ok(());
+    }
     state.send(Command::SetTempo(bpm))
+}
+
+#[tauri::command]
+fn set_link_enabled(enabled: bool, state: State<AppState>) -> Result<(), String> {
+    state.link.enable(enabled);
+    Ok(())
+}
+
+#[tauri::command]
+fn set_link_audio_enabled(enabled: bool, state: State<AppState>) -> Result<(), String> {
+    state.link.enable_link_audio(enabled);
+    Ok(())
 }
 
 #[tauri::command]
@@ -606,10 +643,17 @@ fn main() {
     // Shared snapshot the audio thread publishes into.
     let engine_state = Arc::new(Mutex::new(EngineState::default()));
 
+    // Ableton Link 4 + LinkAudio instance shared between the audio engine and
+    // the UI thread. Disabled by default — the user opts in via the LINK
+    // toggle in the TransportBar.
+    let link = Arc::new(LinkAudio::new(120.0, "RecordPlayer"));
+    link.enable(false);
+    link.enable_link_audio(false);
+
     // Build and start the audio engine. `start_audio` moves the engine into the
     // audio callback, so all later interaction goes through the command channel
     // and the shared state snapshot.
-    let mut engine = AudioEngine::new(44100);
+    let mut engine = AudioEngine::new(44100, link.clone());
     engine.set_command_receiver(command_receiver);
     engine.set_state_output(engine_state.clone());
 
@@ -661,6 +705,7 @@ fn main() {
                 engine_state,
                 database: Mutex::new(database),
                 waveforms: Mutex::new([None, None, None, None]),
+                link: link.clone(),
             });
             Ok(())
         })
@@ -691,6 +736,8 @@ fn main() {
             set_tempo,
             set_metronome,
             set_quantize,
+            set_link_enabled,
+            set_link_audio_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

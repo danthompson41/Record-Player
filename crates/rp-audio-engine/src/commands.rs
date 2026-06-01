@@ -112,6 +112,12 @@ pub struct EngineState {
     pub decks: [DeckState; 4],
     /// Mixer state
     pub mixer: MixerState,
+    /// Ableton Link: whether the session is enabled (tempo/phase sync active).
+    pub link_enabled: bool,
+    /// Ableton Link: whether per-deck audio broadcast is active.
+    pub link_audio_enabled: bool,
+    /// Ableton Link: number of peers in the current session.
+    pub link_peers: u64,
 }
 
 #[derive(Debug, Clone, Default)]

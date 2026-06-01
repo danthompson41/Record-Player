@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/rp-core",
     "crates/rp-audio-engine",
+    "crates/rp-link",
     "crates/rp-vst-host",
     "crates/rp-waveform",
     "crates/rp-analysis",
@@ -14,7 +15,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
+license = "GPL-2.0-or-later"
 authors = ["Daniel Thompson"]
 
 [workspace.dependencies]
@@ -40,6 +41,7 @@ tokio = { version = "1.0", features = ["full"] }
 # Workspace crates
 rp-core = { path = "crates/rp-core" }
 rp-audio-engine = { path = "crates/rp-audio-engine" }
+rp-link = { path = "crates/rp-link" }
 rp-vst-host = { path = "crates/rp-vst-host" }
 rp-waveform = { path = "crates/rp-waveform" }
 rp-analysis = { path = "crates/rp-analysis" }

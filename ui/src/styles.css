@@ -864,6 +864,26 @@ input[type='range'].vol-fader::-webkit-slider-thumb {
   color: white;
 }
 
+.link-toggle,
+.link-audio-toggle {
+  background: var(--panel-2);
+  border: 1px solid #2a2a44;
+  color: var(--muted);
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.link-toggle.on,
+.link-audio-toggle.on {
+  background: var(--accent-b);
+  border-color: var(--accent-b);
+  color: #06222a;
+}
+
 /* Misc -------------------------------------------------------------------- */
 
 .error-banner {

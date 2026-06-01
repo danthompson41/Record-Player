@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 rp-core.workspace = true
+rp-link.workspace = true
 cpal.workspace = true
 symphonia.workspace = true
 rubato.workspace = true
