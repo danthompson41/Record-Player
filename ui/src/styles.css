@@ -223,23 +223,79 @@ body {
 
 .deck-header {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .deck-title {
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.deck-transport {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.transport-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #2a2a44;
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.transport-btn:hover:not(:disabled) {
+  background: #2a2a44;
+}
+
+.transport-btn.play {
+  border-color: transparent;
   font-weight: 600;
+}
+
+.deck-bpm {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.deck-bpm em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  margin-left: 2px;
 }
 
 .deck-time {
   font-variant-numeric: tabular-nums;
   font-size: 13px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.deck-time-remaining {
   color: var(--muted);
 }
 
 .track-info {
   font-size: 13px;
+  min-width: 0;
+  flex: 1;
 }
 
 .track-name {
@@ -251,6 +307,26 @@ body {
 
 .track-name.empty {
   color: var(--muted);
+}
+
+.deck-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.zoom-readout {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 32px;
+  text-align: right;
+}
+
+.deck-meta-row .meta-sep {
+  flex: 1;
 }
 
 .bpm-row {
@@ -383,7 +459,7 @@ input[type='range']:disabled {
 .waveform {
   background: var(--panel-2);
   border-radius: 8px;
-  height: 100px;
+  height: 200px;
   width: 100%;
   cursor: pointer;
   display: block;
@@ -392,11 +468,10 @@ input[type='range']:disabled {
 .minimap {
   background: var(--panel-2);
   border-radius: 6px;
-  height: 36px;
+  height: 40px;
   width: 100%;
   cursor: pointer;
   display: block;
-  margin-top: 4px;
 }
 
 .zoom-fit {

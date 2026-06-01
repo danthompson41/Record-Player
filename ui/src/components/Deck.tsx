@@ -263,26 +263,96 @@ export function Deck({
     api.setFirstBeat(deckId, track.id, next);
   };
 
+  // Reference-app style "1:23 / -2:34" elapsed / remaining display.
+  const remaining = Math.max(0, duration - position);
+
   return (
     <div className="deck">
+      {/* Compact top header: identity, transport, key readouts, and the
+         zoom / load controls pushed to the right. Mirrors the layout in
+         the reference UI where the deck strip is dominated by the waveform
+         and everything else sits in a single line above it. */}
       <div className="deck-header">
         <span className="deck-title" style={{ color }}>
           {label}
         </span>
-        <span className="deck-time">
-          {formatTime(position, sampleRate)} / {formatTime(duration, sampleRate)}
+
+        <div className="deck-transport">
+          <button
+            className="transport-btn play"
+            style={{ background: color, color: textOn(color) }}
+            onClick={() => api.playDeck(deckId)}
+            title="Play"
+          >
+            ▶
+          </button>
+          <button
+            className="transport-btn"
+            onClick={() => api.pauseDeck(deckId)}
+            title="Pause"
+          >
+            ❙❙
+          </button>
+          <button
+            className="transport-btn"
+            onClick={() => api.stopDeck(deckId)}
+            title="Stop"
+          >
+            ■
+          </button>
+        </div>
+
+        <span className="deck-bpm">
+          {bpmNum > 0 ? bpmNum.toFixed(1) : '—'} <em>BPM</em>
         </span>
+
+        <span className="deck-time">
+          {formatTime(position, sampleRate)} /{' '}
+          <span className="deck-time-remaining">
+            −{formatTime(remaining, sampleRate)}
+          </span>
+        </span>
+
+        <div className="track-info">
+          {track ? (
+            <span className="track-name">{track.title ?? track.path}</span>
+          ) : (
+            <span className="track-name empty">No track loaded</span>
+          )}
+        </div>
+
+        <div className="deck-header-right">
+          <button
+            className="nudge"
+            disabled={!track}
+            onClick={() => onZoom(2)}
+            title="Zoom out"
+          >
+            −
+          </button>
+          <button className="zoom-fit" disabled={!track} onClick={zoomFit}>
+            fit
+          </button>
+          <button
+            className="nudge"
+            disabled={!track}
+            onClick={() => onZoom(0.5)}
+            title="Zoom in"
+          >
+            +
+          </button>
+          <span className="zoom-readout">
+            {viewLen > 0 ? (viewLen / sampleRate).toFixed(1) : '0.0'}s
+          </span>
+          <button className="btn outline" onClick={onLoad}>
+            Load…
+          </button>
+        </div>
       </div>
 
-      <div className="track-info">
-        {track ? (
-          <span className="track-name">{track.title ?? track.path}</span>
-        ) : (
-          <span className="track-name empty">No track loaded</span>
-        )}
-      </div>
-
-      <div className="bpm-row">
+      {/* BPM input + grid nudge — kept since they need persistent editable
+         fields. Compressed onto one row instead of three. */}
+      <div className="bpm-row deck-meta-row">
         <span>BPM</span>
         <input
           type="number"
@@ -297,70 +367,30 @@ export function Deck({
         />
         <span className="bpm-target">→ {globalBpm.toFixed(0)} global</span>
         {synced && <span className="pitch-readout">{pitchPercent}%</span>}
-      </div>
 
-      <div className="bpm-row">
+        <span className="meta-sep" />
+
         <span>Grid</span>
-        <button className="nudge" disabled={!track} onClick={() => nudgeGrid(-10)}>
+        <button
+          className="nudge"
+          disabled={!track}
+          onClick={() => nudgeGrid(-10)}
+        >
           −
         </button>
         <span className="bpm-target">
           {((firstBeat / sampleRate) * 1000).toFixed(0)} ms
         </span>
-        <button className="nudge" disabled={!track} onClick={() => nudgeGrid(10)}>
-          +
-        </button>
-      </div>
-
-      <div className="bpm-row zoom-row">
-        <span>Zoom</span>
-        <button className="nudge" disabled={!track} onClick={() => onZoom(0.5)} title="Zoom in">
-          +
-        </button>
-        <button className="zoom-fit" disabled={!track} onClick={zoomFit}>
-          fit
-        </button>
-        <button className="nudge" disabled={!track} onClick={() => onZoom(2)} title="Zoom out">
-          −
-        </button>
-        <span className="bpm-target">
-          {viewLen > 0 ? (viewLen / sampleRate).toFixed(2) : '0.00'}s
-        </span>
-      </div>
-
-      <div className="bpm-row cue-row">
-        <span>Cue</span>
         <button
-          className="cue-btn first-bar"
-          style={track ? { background: BEGIN_COLOR, borderColor: BEGIN_COLOR, color: textOn(BEGIN_COLOR) } : undefined}
+          className="nudge"
           disabled={!track}
-          onClick={jumpToFirstBar}
-          title="Jump to the first bar (start)"
+          onClick={() => nudgeGrid(10)}
         >
-          ⇤
+          +
         </button>
-        {cues.map((c, n) => (
-          <button
-            key={n}
-            className={`cue-btn ${c != null ? 'set' : ''}`}
-            style={
-              c != null
-                ? { background: CUE_COLORS[n], borderColor: CUE_COLORS[n], color: textOn(CUE_COLORS[n]) }
-                : undefined
-            }
-            disabled={!track || bpmNum <= 0}
-            onClick={() => onCue(n)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              clearCue(n);
-            }}
-            title={c != null ? `Jump to cue ${n + 1} (right-click to clear)` : `Set cue ${n + 1}`}
-          >
-            {n + 1}
-          </button>
-        ))}
       </div>
 
+      {/* Big main waveform — the visually dominant element. */}
       <Waveform
         peaks={buffer.peaks}
         peaksStart={buffer.start}
@@ -380,36 +410,8 @@ export function Deck({
         cues={cues}
       />
 
-      <div className="bpm-row loop-row">
-        <span>Loop</span>
-        {LOOP_OPTIONS.map((o) => (
-          <button
-            key={o.beats}
-            className={`loop-btn ${activeLoop === o.beats ? 'active' : ''}`}
-            disabled={!track || bpmNum <= 0}
-            onClick={() => onLoop(o.beats)}
-            title={`${o.label} bar loop`}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="controls">
-        <button className="btn" style={{ background: color }} onClick={() => api.playDeck(deckId)}>
-          ▶ Play
-        </button>
-        <button className="btn secondary" onClick={() => api.pauseDeck(deckId)}>
-          ❙❙ Pause
-        </button>
-        <button className="btn secondary" onClick={() => api.stopDeck(deckId)}>
-          ■ Stop
-        </button>
-        <button className="btn outline" onClick={onLoad}>
-          Load…
-        </button>
-      </div>
-
+      {/* Minimap sits directly under the waveform in the reference layout,
+         carrying the cue-colored sections and the viewport box. */}
       <Minimap
         rms={minimapRms}
         durationSamples={duration}
@@ -422,6 +424,70 @@ export function Deck({
         viewEnd={viewEnd}
         onClickSample={onMinimapClick}
       />
+
+      {/* Cue buttons — directly below the minimap, no row label. */}
+      <div className="bpm-row cue-row">
+        <button
+          className="cue-btn first-bar"
+          style={
+            track
+              ? {
+                  background: BEGIN_COLOR,
+                  borderColor: BEGIN_COLOR,
+                  color: textOn(BEGIN_COLOR),
+                }
+              : undefined
+          }
+          disabled={!track}
+          onClick={jumpToFirstBar}
+          title="Jump to the first bar (start)"
+        >
+          ⇤
+        </button>
+        {cues.map((c, n) => (
+          <button
+            key={n}
+            className={`cue-btn ${c != null ? 'set' : ''}`}
+            style={
+              c != null
+                ? {
+                    background: CUE_COLORS[n],
+                    borderColor: CUE_COLORS[n],
+                    color: textOn(CUE_COLORS[n]),
+                  }
+                : undefined
+            }
+            disabled={!track || bpmNum <= 0}
+            onClick={() => onCue(n)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              clearCue(n);
+            }}
+            title={
+              c != null
+                ? `Jump to cue ${n + 1} (right-click to clear)`
+                : `Set cue ${n + 1}`
+            }
+          >
+            {n + 1}
+          </button>
+        ))}
+      </div>
+
+      {/* Loop buttons at the bottom, no row label. */}
+      <div className="bpm-row loop-row">
+        {LOOP_OPTIONS.map((o) => (
+          <button
+            key={o.beats}
+            className={`loop-btn ${activeLoop === o.beats ? 'active' : ''}`}
+            disabled={!track || bpmNum <= 0}
+            onClick={() => onLoop(o.beats)}
+            title={`${o.label} bar loop`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
