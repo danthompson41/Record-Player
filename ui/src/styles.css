@@ -52,12 +52,25 @@ body {
   overflow: auto;
 }
 
+/* Decks A/B on top, C/D on bottom, Mixer in the middle column spanning both
+   rows — DJ-controller style with all four decks visible at once. */
 .deck-row {
-  display: flex;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: 1fr 400px 1fr;
+  grid-template-rows: 1fr 1fr;
+  grid-template-areas:
+    "deckA mixer deckB"
+    "deckC mixer deckD";
+  gap: 12px;
   flex: 1;
   min-height: 0;
 }
+
+.deck:nth-of-type(1) { grid-area: deckA; }
+.deck:nth-of-type(2) { grid-area: deckB; }
+.deck:nth-of-type(3) { grid-area: deckC; }
+.deck:nth-of-type(4) { grid-area: deckD; }
+.mixer { grid-area: mixer; }
 
 /* Library ----------------------------------------------------------------- */
 
@@ -112,7 +125,7 @@ body {
 /* Columns: Track | BPM | Length | Waveform | Location | Load */
 .library-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1.6fr) 52px 60px minmax(140px, 2fr) minmax(140px, 2.2fr) 60px;
+  grid-template-columns: minmax(120px, 1.6fr) 52px 60px minmax(140px, 2fr) minmax(140px, 2.2fr) 116px;
   align-items: center;
   gap: 12px;
   padding: 5px 8px;
@@ -499,22 +512,22 @@ input[type='range']::-webkit-slider-thumb {
 /* Mixer ------------------------------------------------------------------- */
 
 .mixer {
-  width: 280px;
-  flex-shrink: 0;
   background: var(--panel);
   border-radius: 12px;
-  padding: 14px 12px;
+  padding: 12px 10px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .mixer-strips {
-  flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
   min-height: 0;
 }
 
@@ -522,126 +535,219 @@ input[type='range']::-webkit-slider-thumb {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
+  gap: 8px;
   background: var(--panel-2);
   border-radius: 8px;
-  padding: 10px 8px;
+  padding: 8px 6px;
   min-height: 0;
+  min-width: 0;
 }
 
-.strip-label {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--muted);
+/* Channel label sits in a thin underlined header colored to match the deck. */
+.strip-header {
   text-align: center;
-  height: 18px;
+  padding-bottom: 4px;
+  border-bottom: 1.5px solid var(--muted);
+}
+
+.strip-header-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .strip-sync {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   width: 100%;
-  align-items: stretch;
-  height: 72px;
 }
 
 .strip-sync .sync-btn {
-  padding: 3px 4px;
+  flex: 1;
+  padding: 3px 0;
+  font-size: 9px;
+  min-width: 0;
 }
 
-.strip-pitch {
+/* Stacked horizontal KnobRows — label on the left, slider fills the rest. */
+.strip-knobs {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  height: 36px;
+  gap: 5px;
 }
 
-.strip-pitch input[type='range'] {
-  width: 100%;
-}
-
-.strip-pitch-val {
-  font-size: 10px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.strip-eq {
+.knob-row {
   display: flex;
-  justify-content: space-around;
-  align-items: flex-end;
-  gap: 6px;
-  width: 100%;
-  height: 96px;
-}
-
-.eq-vertical {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   font-size: 9px;
   color: var(--muted);
+  min-width: 0;
 }
 
-.eq-vertical input[type='range'] {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  width: 6px;
-  height: 70px;
+.knob-label {
+  width: 28px;
+  flex-shrink: 0;
+  letter-spacing: 0.06em;
+  font-weight: 600;
 }
 
-/* Empty rows in the master strip — same heights as channel rows so the master
-   fader/meters line up horizontally with the channel faders/meters. */
-.strip-placeholder {
-  visibility: hidden;
+.knob-row input[type='range'] {
+  flex: 1 1 0;
+  min-width: 30px;
+  height: 4px;
 }
 
+.knob-row input[type='range']::-webkit-slider-thumb {
+  width: 10px;
+  height: 14px;
+  border-radius: 2px;
+  background: #d8d8e8;
+}
+
+
+.knob-val {
+  width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Big white vertical fader + thin L/R meters beside it. */
 .strip-fader {
   display: flex;
   justify-content: center;
-  gap: 10px;
-  height: 160px;
-  padding: 4px 0;
+  gap: 4px;
+  flex: 1;
+  min-height: 120px;
+  padding: 4px 0 2px;
 }
 
 input[type='range'].vol-fader {
   writing-mode: vertical-lr;
   direction: rtl;
-  width: 8px;
+  width: 14px;
   height: 100%;
+  background: #2a2a44;
+  border-radius: 4px;
+}
+
+input[type='range'].vol-fader::-webkit-slider-thumb {
+  width: 22px;
+  height: 12px;
+  background: #f0f0f5;
+  border-radius: 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
 .strip-meters {
   height: 100%;
+  gap: 2px;
 }
 
-.crossfader-row {
+.strip-meters .meter {
+  width: 5px;
+}
+
+/* Master gain row, sits above the XY pad now that master no longer has its
+   own channel strip between A and B. */
+.master-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  padding: 8px 4px 0;
+  border-top: 1px solid #2a2a44;
 }
 
-.mixer-label {
-  font-size: 12px;
+.master-label {
+  font-size: 11px;
   color: var(--muted);
-  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  width: 50px;
 }
 
-.crossfader {
+.master-row input[type='range'] {
   flex: 1;
-  background: linear-gradient(to right, var(--accent-a) 0%, #333 50%, var(--accent-b) 100%);
 }
 
-.crossfader::-webkit-slider-thumb {
-  width: 22px;
-  height: 22px;
-  background: white;
-  border-radius: 4px;
+.master-val {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  width: 28px;
+  text-align: right;
+}
+
+.master-row .master-meters {
+  height: 18px;
+}
+
+/* XY crossfader pad. Decks A/B/C/D pinned to the four corners. */
+.xy-pad-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 2px;
+}
+
+.xy-pad {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: 240px;
+  background: var(--panel-2);
+  border: 1px solid #2a2a44;
+  border-radius: 10px;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.xy-axis {
+  position: absolute;
+  background: #2a2a44;
+  pointer-events: none;
+}
+
+.xy-axis-h {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+}
+
+.xy-axis-v {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+}
+
+.xy-corner {
+  position: absolute;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 4px 7px;
+  pointer-events: none;
+}
+
+.xy-tl { top: 4px; left: 6px; }
+.xy-tr { top: 4px; right: 6px; }
+.xy-bl { bottom: 4px; left: 6px; }
+.xy-br { bottom: 4px; right: 6px; }
+
+.xy-knob {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+  pointer-events: none;
 }
 
 /* Transport bar ----------------------------------------------------------- */

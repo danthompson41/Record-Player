@@ -22,7 +22,8 @@ export interface EngineSnapshot {
   is_playing: boolean;
   beat_in_bar: number;
   beat_phase: number;
-  crossfader: number;
+  /** XY crossfader position (x, y), each ∈ [-1, 1]. */
+  crossfader_xy: [number, number];
   master_left: number;
   master_right: number;
   decks: DeckSnapshot[];
@@ -92,8 +93,11 @@ export const api = {
     invoke('set_cues', { trackId, cues }),
   setChannelEq: (deck: number, low: number, mid: number, high: number) =>
     invoke('set_channel_eq', { deck, low, mid, high }),
+  /** DJ "colour" filter slider: value ∈ [-1, 1]; 0 = bypass, − LP, + HP. */
+  setChannelFilter: (deck: number, value: number) =>
+    invoke('set_channel_filter', { deck, value }),
 
-  setCrossfader: (position: number) => invoke('set_crossfader', { position }),
+  setCrossfader: (x: number, y: number) => invoke('set_crossfader', { x, y }),
   setMasterGain: (gain: number) => invoke('set_master_gain', { gain }),
   setTempo: (bpm: number) => invoke('set_tempo', { bpm }),
   setMetronome: (enabled: boolean) => invoke('set_metronome', { enabled }),

@@ -60,7 +60,8 @@ struct EngineSnapshot {
     is_playing: bool,
     beat_in_bar: u32,
     beat_phase: f32,
-    crossfader: f32,
+    /// XY crossfader position (x, y), each ∈ [-1, 1].
+    crossfader_xy: [f32; 2],
     master_left: f32,
     master_right: f32,
     decks: Vec<DeckSnapshot>,
@@ -256,6 +257,22 @@ fn load_track(deck: u8, path: String, state: State<AppState>) -> Result<TrackDto
         db.get(id).map_err(|e| e.to_string())?.unwrap_or(metadata)
     };
 
+    // First time we see this track (no BPM persisted): auto-detect, write it
+    // back, and re-read the row so the DTO + downstream engine command see it.
+    let track = if track.bpm.is_none() {
+        let detected = rp_analysis::BpmDetector::new(sample_rate)
+            .detect(&buffer.samples, channels);
+        if let Some(bpm) = detected {
+            let db = state.database.lock().map_err(|e| e.to_string())?;
+            db.set_bpm(track.id, bpm).map_err(|e| e.to_string())?;
+            db.get(track.id).map_err(|e| e.to_string())?.unwrap_or(track)
+        } else {
+            track
+        }
+    } else {
+        track
+    };
+
     // Keep a shared handle to the samples for waveform range queries.
     {
         let mut waveforms = state.waveforms.lock().map_err(|e| e.to_string())?;
@@ -413,7 +430,7 @@ fn get_engine_state(state: State<AppState>) -> Result<EngineSnapshot, String> {
         is_playing: s.is_playing,
         beat_in_bar: s.beat_in_bar,
         beat_phase: s.beat_phase,
-        crossfader: s.mixer.crossfader,
+        crossfader_xy: s.mixer.crossfader_xy,
         master_left: s.mixer.master_peaks[0],
         master_right: s.mixer.master_peaks[1],
         decks,
@@ -548,8 +565,13 @@ fn set_channel_eq(
 }
 
 #[tauri::command]
-fn set_crossfader(position: f32, state: State<AppState>) -> Result<(), String> {
-    state.send(Command::SetCrossfader(position))
+fn set_crossfader(x: f32, y: f32, state: State<AppState>) -> Result<(), String> {
+    state.send(Command::SetCrossfader(x, y))
+}
+
+#[tauri::command]
+fn set_channel_filter(deck: u8, value: f32, state: State<AppState>) -> Result<(), String> {
+    state.send(Command::SetChannelFilter(deck as usize, value))
 }
 
 #[tauri::command]
@@ -663,6 +685,7 @@ fn main() {
             set_track_bpm,
             set_first_beat,
             set_channel_eq,
+            set_channel_filter,
             set_crossfader,
             set_master_gain,
             set_tempo,

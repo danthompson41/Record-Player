@@ -31,9 +31,6 @@ rtrb = "0.3"
 # VST
 vst3 = "0.3"
 
-# Analysis
-aubio = "0.2"
-
 # Database
 rusqlite = { version = "0.31", features = ["bundled"] }
 

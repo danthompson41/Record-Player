@@ -80,6 +80,8 @@ export function Library({ refreshKey, onLoadToDeck }: LibraryProps) {
               <span className="lib-actions">
                 <button onClick={() => onLoadToDeck(0, track.path)}>A</button>
                 <button onClick={() => onLoadToDeck(1, track.path)}>B</button>
+                <button onClick={() => onLoadToDeck(2, track.path)}>C</button>
+                <button onClick={() => onLoadToDeck(3, track.path)}>D</button>
               </span>
             </div>
           ))}

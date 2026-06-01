@@ -15,6 +15,8 @@ export interface ChannelState {
   pitch: number; // -50..50
   sync: SyncMode;
   eq: { low: number; mid: number; high: number };
+  /** DJM-style colour filter slider: -100 = full LP, 0 = bypass, +100 = full HP. */
+  filter: number;
 }
 
 const EMPTY_DECK: DeckUi = { track: null };
@@ -24,28 +26,29 @@ const DEFAULT_CHANNEL: ChannelState = {
   pitch: 0,
   sync: 'tempo',
   eq: { low: 1, mid: 1, high: 1 },
+  filter: 0,
 };
 
 const DECKS = [
-  { id: 0, label: 'Deck A', color: '#e94560' },
-  { id: 1, label: 'Deck B', color: '#4ecdc4' },
+  { id: 0, label: 'Deck A', color: '#e94560' }, // top-left  (XY −x, −y)
+  { id: 1, label: 'Deck B', color: '#4ecdc4' }, // top-right (XY +x, −y)
+  { id: 2, label: 'Deck C', color: '#f9c74f' }, // bottom-left
+  { id: 3, label: 'Deck D', color: '#9d4edd' }, // bottom-right
 ];
 
 export function App() {
   const snapshot = useEngineState();
-  const [decks, setDecks] = useState<DeckUi[]>([EMPTY_DECK, EMPTY_DECK]);
-  const [channels, setChannels] = useState<ChannelState[]>([
-    DEFAULT_CHANNEL,
-    DEFAULT_CHANNEL,
-  ]);
+  const [decks, setDecks] = useState<DeckUi[]>(() => DECKS.map(() => EMPTY_DECK));
+  const [channels, setChannels] = useState<ChannelState[]>(() =>
+    DECKS.map(() => DEFAULT_CHANNEL),
+  );
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   // Push UI defaults to the engine on mount (the engine starts with sync off,
   // so we have to send the initial sync mode for it to match the UI).
   useEffect(() => {
-    api.setDeckSync(0, DEFAULT_CHANNEL.sync);
-    api.setDeckSync(1, DEFAULT_CHANNEL.sync);
+    DECKS.forEach((d) => api.setDeckSync(d.id, DEFAULT_CHANNEL.sync));
   }, []);
 
   const setChannel = useCallback((id: number, partial: Partial<ChannelState>) => {
@@ -87,35 +90,25 @@ export function App() {
         <TransportBar snapshot={snapshot} />
 
         <div className="deck-row">
-          <Deck
-            key={DECKS[0].id}
-            deckId={DECKS[0].id}
-            label={DECKS[0].label}
-            color={DECKS[0].color}
-            track={decks[0].track}
-            snapshot={snapshot?.decks[0]}
-            globalBpm={snapshot?.tempo ?? 120}
-            synced={channels[0].sync !== 'off'}
-            onLoad={() => pickAndLoad(0)}
-          />
+          {DECKS.map((d, i) => (
+            <Deck
+              key={d.id}
+              deckId={d.id}
+              label={d.label}
+              color={d.color}
+              track={decks[i].track}
+              snapshot={snapshot?.decks[i]}
+              globalBpm={snapshot?.tempo ?? 120}
+              synced={channels[i].sync !== 'off'}
+              onLoad={() => pickAndLoad(i)}
+            />
+          ))}
 
           <Mixer
             snapshot={snapshot}
             channels={channels}
             setChannel={setChannel}
-            deckColors={[DECKS[0].color, DECKS[1].color]}
-          />
-
-          <Deck
-            key={DECKS[1].id}
-            deckId={DECKS[1].id}
-            label={DECKS[1].label}
-            color={DECKS[1].color}
-            track={decks[1].track}
-            snapshot={snapshot?.decks[1]}
-            globalBpm={snapshot?.tempo ?? 120}
-            synced={channels[1].sync !== 'off'}
-            onLoad={() => pickAndLoad(1)}
+            deckColors={DECKS.map((d) => d.color) as [string, string, string, string]}
           />
         </div>
       </div>

@@ -40,7 +40,13 @@ pub enum Command {
     SetChannelGain(usize, f32),
     SetChannelTrim(usize, f32),
     SetChannelEQ(usize, f32, f32, f32), // low, mid, high
-    SetCrossfader(f32),
+    /// DJM-style HP/LP "colour" filter slider, value ∈ [-1, 1]; 0 = bypass,
+    /// negative = LP (more negative = lower cutoff), positive = HP.
+    SetChannelFilter(usize, f32),
+    /// 2-D XY crossfader position: (x, y) each ∈ [-1, 1]. Decks A, B, C, D
+    /// are pinned to the four corners (A=top-left, B=top-right, C=bottom-left,
+    /// D=bottom-right); see `Mixer::xy_corner_gains` for the gain math.
+    SetCrossfader(f32, f32),
     SetCrossfaderCurve(CrossfaderCurve),
     SetMasterGain(f32),
 
@@ -131,8 +137,8 @@ pub struct MixerState {
     pub channel_peaks: [[f32; 2]; 4],
     /// Master peak meters
     pub master_peaks: [f32; 2],
-    /// Current crossfader position
-    pub crossfader: f32,
+    /// Current XY crossfader position (x, y), each ∈ [-1, 1].
+    pub crossfader_xy: [f32; 2],
 }
 
 /// Create a command channel with the specified capacity

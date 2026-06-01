@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, EngineSnapshot, SyncMode } from '../api';
 import { ChannelState } from '../App';
 import { Meter } from './Meter';
@@ -7,19 +7,14 @@ interface MixerProps {
   snapshot: EngineSnapshot | null;
   channels: ChannelState[];
   setChannel: (id: number, partial: Partial<ChannelState>) => void;
-  deckColors: [string, string];
+  deckColors: [string, string, string, string];
 }
 
 const SYNC_MODES: SyncMode[] = ['off', 'tempo', 'phase'];
+const STRIP_LABELS = ['A', 'B', 'C', 'D'];
 
 export function Mixer({ snapshot, channels, setChannel, deckColors }: MixerProps) {
-  const [crossfader, setCrossfader] = useState(0); // -100..100
   const [master, setMaster] = useState(100); // 0..120
-
-  const onCrossfader = (v: number) => {
-    setCrossfader(v);
-    api.setCrossfader(v / 100);
-  };
 
   const onMaster = (v: number) => {
     setMaster(v);
@@ -29,48 +24,42 @@ export function Mixer({ snapshot, channels, setChannel, deckColors }: MixerProps
   return (
     <div className="mixer">
       <div className="mixer-strips">
-        <ChannelStrip
-          id={0}
-          label="A"
-          color={deckColors[0]}
-          state={channels[0]}
-          setState={(p) => setChannel(0, p)}
-          peakL={snapshot?.decks[0]?.peak_left ?? 0}
-          peakR={snapshot?.decks[0]?.peak_right ?? 0}
-          enginePitch={snapshot?.decks[0]?.pitch ?? 1}
-        />
-
-        <MasterStrip
-          master={master}
-          onMaster={onMaster}
-          peakL={snapshot?.master_left ?? 0}
-          peakR={snapshot?.master_right ?? 0}
-        />
-
-        <ChannelStrip
-          id={1}
-          label="B"
-          color={deckColors[1]}
-          state={channels[1]}
-          setState={(p) => setChannel(1, p)}
-          peakL={snapshot?.decks[1]?.peak_left ?? 0}
-          peakR={snapshot?.decks[1]?.peak_right ?? 0}
-          enginePitch={snapshot?.decks[1]?.pitch ?? 1}
-        />
+        {STRIP_LABELS.map((label, i) => (
+          <ChannelStrip
+            key={i}
+            id={i}
+            label={label}
+            color={deckColors[i]}
+            state={channels[i]}
+            setState={(p) => setChannel(i, p)}
+            peakL={snapshot?.decks[i]?.peak_left ?? 0}
+            peakR={snapshot?.decks[i]?.peak_right ?? 0}
+            enginePitch={snapshot?.decks[i]?.pitch ?? 1}
+          />
+        ))}
       </div>
 
-      <div className="crossfader-row">
-        <span className="mixer-label">A</span>
+      <div className="master-row">
+        <span className="master-label">Master</span>
         <input
           type="range"
-          className="crossfader"
-          min={-100}
-          max={100}
-          value={crossfader}
-          onChange={(e) => onCrossfader(Number(e.target.value))}
+          min={0}
+          max={120}
+          value={master}
+          onChange={(e) => onMaster(Number(e.target.value))}
         />
-        <span className="mixer-label">B</span>
+        <span className="master-val">{master}</span>
+        <div className="master-meters">
+          <Meter level={snapshot?.master_left ?? 0} />
+          <Meter level={snapshot?.master_right ?? 0} />
+        </div>
       </div>
+
+      <XYPad
+        x={snapshot?.crossfader_xy?.[0] ?? 0}
+        y={snapshot?.crossfader_xy?.[1] ?? 0}
+        deckColors={deckColors}
+      />
     </div>
   );
 }
@@ -120,10 +109,16 @@ function ChannelStrip({
     api.setChannelEq(id, next.low, next.mid, next.high);
   };
 
+  const onFilter = (v: number) => {
+    setState({ filter: v });
+    api.setChannelFilter(id, v / 100);
+  };
+
+
   return (
     <div className="mixer-strip">
-      <div className="strip-label" style={{ color }}>
-        {label}
+      <div className="strip-header" style={{ borderColor: color }}>
+        <span className="strip-header-label" style={{ color }}>{label}</span>
       </div>
 
       <div className="strip-sync">
@@ -134,39 +129,45 @@ function ChannelStrip({
             onClick={() => onSync(mode)}
             title={mode === 'off' ? 'Free pitch' : 'Match global BPM'}
           >
-            {mode === 'off' ? 'off' : mode === 'tempo' ? 'sync' : 'phase'}
+            {mode === 'off' ? 'off' : mode === 'tempo' ? 'sync' : 'phs'}
           </button>
         ))}
       </div>
 
-      <div className="strip-pitch">
-        <input
-          type="range"
+      <div className="strip-knobs">
+        <KnobRow
+          label="PITCH"
+          value={Math.round(displayedPitch)}
           min={-50}
           max={50}
-          value={Math.round(displayedPitch)}
+          step={1}
           disabled={synced}
-          onChange={(e) => onPitch(Number(e.target.value))}
+          onChange={onPitch}
+          formatted={`${displayedPitch > 0 ? '+' : ''}${displayedPitch.toFixed(0)}%`}
         />
-        <span className="strip-pitch-val">
-          {displayedPitch > 0 ? `+${displayedPitch.toFixed(0)}` : displayedPitch.toFixed(0)}%
-        </span>
-      </div>
-
-      <div className="strip-eq">
-        {(['high', 'mid', 'low'] as const).map((band) => (
-          <label key={band} className="eq-vertical">
-            <input
-              type="range"
+        {(['high', 'mid', 'low'] as const).map((band) => {
+          const lbl = band === 'high' ? 'HI' : band === 'mid' ? 'MID' : 'LOW';
+          return (
+            <KnobRow
+              key={band}
+              label={lbl}
+              value={state.eq[band]}
               min={0}
               max={2}
               step={0.01}
-              value={state.eq[band]}
-              onChange={(e) => onEq(band, Number(e.target.value))}
+              onChange={(v) => onEq(band, v)}
             />
-            <span>{band.toUpperCase()}</span>
-          </label>
-        ))}
+          );
+        })}
+        <KnobRow
+          label="FLTR"
+          value={state.filter}
+          min={-100}
+          max={100}
+          step={1}
+          onChange={onFilter}
+          centered
+        />
       </div>
 
       <div className="strip-fader">
@@ -187,36 +188,127 @@ function ChannelStrip({
   );
 }
 
-interface MasterStripProps {
-  master: number;
-  onMaster: (v: number) => void;
-  peakL: number;
-  peakR: number;
+interface KnobRowProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled?: boolean;
+  onChange: (v: number) => void;
+  /** Optional formatted readout to the right (else nothing is shown). */
+  formatted?: string;
+  /** When true, double-clicking the slider snaps it back to 0 (bipolar). */
+  centered?: boolean;
 }
 
-function MasterStrip({ master, onMaster, peakL, peakR }: MasterStripProps) {
+/** Compact label + horizontal-slider row, used for pitch / EQ / filter. */
+function KnobRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  disabled,
+  onChange,
+  formatted,
+  centered,
+}: KnobRowProps) {
   return (
-    <div className="mixer-strip master-strip">
-      <div className="strip-label">M</div>
-      {/* Empty placeholders keep the master fader aligned with the channel
-          strips' faders (which sit below sync/pitch/eq rows). */}
-      <div className="strip-sync strip-placeholder" />
-      <div className="strip-pitch strip-placeholder" />
-      <div className="strip-eq strip-placeholder" />
-      <div className="strip-fader">
-        <input
-          type="range"
-          className="vol-fader"
-          min={0}
-          max={120}
-          value={master}
-          onChange={(e) => onMaster(Number(e.target.value))}
-        />
-        <div className="strip-meters">
-          <Meter level={peakL} />
-          <Meter level={peakR} />
-        </div>
+    <div className={`knob-row${centered ? ' knob-row-centered' : ''}`}>
+      <span className="knob-label">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        onDoubleClick={centered ? () => onChange(0) : undefined}
+      />
+      {formatted != null && <span className="knob-val">{formatted}</span>}
+    </div>
+  );
+}
+
+interface XYPadProps {
+  /** Authoritative position from the engine snapshot (≈30 Hz). */
+  x: number; // [-1, 1]
+  y: number; // [-1, 1]
+  deckColors: [string, string, string, string];
+}
+
+/**
+ * 2-D crossfader pad. Decks A/B/C/D are pinned to the four corners (A=top-left,
+ * B=top-right, C=bottom-left, D=bottom-right) per the engine's `xy_corner_gains`.
+ * Local state is used during drag for instant feedback; the engine snapshot is
+ * the source of truth between drags.
+ */
+function XYPad({ x: snapX, y: snapY, deckColors }: XYPadProps) {
+  const padRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+
+  const positionFromEvent = useCallback((clientX: number, clientY: number) => {
+    const el = padRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const nx = ((clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = ((clientY - rect.top) / rect.height) * 2 - 1;
+    return { x: clamp(nx, -1, 1), y: clamp(ny, -1, 1) };
+  }, []);
+
+  const apply = useCallback((p: { x: number; y: number }) => {
+    setDrag(p);
+    api.setCrossfader(p.x, p.y);
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      if (!draggingRef.current) return;
+      const p = positionFromEvent(e.clientX, e.clientY);
+      if (p) apply(p);
+    };
+    const onUp = () => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      setDrag(null); // release: defer to snapshot value again
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [apply, positionFromEvent]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    draggingRef.current = true;
+    const p = positionFromEvent(e.clientX, e.clientY);
+    if (p) apply(p);
+  };
+
+  const x = drag?.x ?? snapX;
+  const y = drag?.y ?? snapY;
+  const knobLeft = `${((x + 1) / 2) * 100}%`;
+  const knobTop = `${((y + 1) / 2) * 100}%`;
+
+  return (
+    <div className="xy-pad-wrap">
+      <div className="xy-pad" ref={padRef} onPointerDown={onPointerDown}>
+        <div className="xy-corner xy-tl" style={{ color: deckColors[0] }}>A</div>
+        <div className="xy-corner xy-tr" style={{ color: deckColors[1] }}>B</div>
+        <div className="xy-corner xy-bl" style={{ color: deckColors[2] }}>C</div>
+        <div className="xy-corner xy-br" style={{ color: deckColors[3] }}>D</div>
+        <div className="xy-axis xy-axis-h" />
+        <div className="xy-axis xy-axis-v" />
+        <div className="xy-knob" style={{ left: knobLeft, top: knobTop }} />
       </div>
     </div>
   );
+}
+
+function clamp(v: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, v));
 }

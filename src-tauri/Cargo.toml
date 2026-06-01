@@ -19,6 +19,7 @@ rp-audio-engine = { path = "../crates/rp-audio-engine" }
 rp-waveform = { path = "../crates/rp-waveform" }
 rp-library = { path = "../crates/rp-library" }
 rp-app = { path = "../crates/rp-app" }
+rp-analysis = { path = "../crates/rp-analysis" }
 
 [features]
 default = ["custom-protocol"]

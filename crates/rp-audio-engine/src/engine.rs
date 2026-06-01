@@ -125,6 +125,7 @@ impl AudioEngine {
     pub fn set_output_sample_rate(&mut self, sample_rate: u32) {
         self.transport.set_sample_rate(sample_rate);
         self.metronome.set_sample_rate(sample_rate);
+        self.mixer.set_sample_rate(sample_rate);
         for deck in &mut self.decks {
             deck.set_output_sample_rate(sample_rate);
         }
@@ -204,7 +205,13 @@ impl AudioEngine {
                 self.mixer.channels[ch].eq_mid = mid;
                 self.mixer.channels[ch].eq_high = high;
             }
-            Command::SetCrossfader(pos) => self.mixer.crossfader = pos,
+            Command::SetChannelFilter(ch, value) => {
+                self.mixer.set_channel_filter(ch, value);
+            }
+            Command::SetCrossfader(x, y) => {
+                self.mixer.crossfader_x = x;
+                self.mixer.crossfader_y = y;
+            }
             Command::SetCrossfaderCurve(curve) => self.mixer.crossfader_curve = curve,
             Command::SetMasterGain(gain) => self.mixer.master_gain = gain,
 
@@ -410,7 +417,7 @@ impl AudioEngine {
                     ],
                 ],
                 master_peaks: [self.mixer.master_peak_left, self.mixer.master_peak_right],
-                crossfader: self.mixer.crossfader,
+                crossfader_xy: [self.mixer.crossfader_x, self.mixer.crossfader_y],
             },
         }
     }

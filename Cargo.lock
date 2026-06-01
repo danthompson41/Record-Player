@@ -2773,6 +2773,7 @@ dependencies = [
 name = "recordplayer-tauri"
 version = "0.1.0"
 dependencies = [
+ "rp-analysis",
  "rp-app",
  "rp-audio-engine",
  "rp-core",
@@ -2929,6 +2930,7 @@ name = "rp-analysis"
 version = "0.1.0"
 dependencies = [
  "rp-core",
+ "rustfft",
  "thiserror 1.0.69",
 ]
 
