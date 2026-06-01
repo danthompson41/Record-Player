@@ -407,25 +407,39 @@ impl Mixer {
         ]
     }
 
-    /// Mix four deck outputs into a stereo master output.
-    pub fn mix(&mut self, deck_outputs: &[[f32; 2]; 4], output: &mut [f32; 2]) {
+    /// Apply just the per-channel EQ + filter to one stereo sample, advancing
+    /// the biquad state. Split out from `mix` so the engine can pre-compute a
+    /// per-deck post-EQ/filter buffer once per block, then re-use it for both
+    /// the Link Audio broadcast and the per-frame crossfader/master sum
+    /// without running the biquads twice.
+    #[inline]
+    pub fn process_channel_eq_filter(
+        &mut self,
+        channel: usize,
+        l: f32,
+        r: f32,
+    ) -> (f32, f32) {
+        let ch = &mut self.channels[channel];
+        let eq_gains = [ch.eq_low, ch.eq_mid, ch.eq_high];
+        let (eq_l, eq_r) = ch.eq_state.process(l, r, eq_gains);
+        ch.filter_state.process(eq_l, eq_r)
+    }
+
+    /// Combine pre-processed (post-EQ/filter) deck samples into a stereo
+    /// master with crossfader + gain + master + soft clip + meter updates.
+    /// Pair with `process_channel_eq_filter`.
+    #[inline]
+    pub fn combine(&mut self, processed: &[[f32; 2]; 4], output: &mut [f32; 2]) {
         let mut left = 0.0f32;
         let mut right = 0.0f32;
-
         let xy_gains = self.xy_corner_gains();
 
-        for (i, deck_out) in deck_outputs.iter().enumerate() {
+        for (i, sample) in processed.iter().enumerate() {
             let channel = &mut self.channels[i];
-            let eq_gains = [channel.eq_low, channel.eq_mid, channel.eq_high];
-            let (eq_l, eq_r) = channel.eq_state.process(deck_out[0], deck_out[1], eq_gains);
-            let (filtered_l, filtered_r) = channel.filter_state.process(eq_l, eq_r);
-
             let gain = channel.effective_gain() * xy_gains[i];
-            let sample_l = filtered_l * gain;
-            let sample_r = filtered_r * gain;
-
+            let sample_l = sample[0] * gain;
+            let sample_r = sample[1] * gain;
             channel.update_meters(sample_l, sample_r);
-
             left += sample_l;
             right += sample_r;
         }
@@ -441,6 +455,19 @@ impl Mixer {
 
         output[0] = left;
         output[1] = right;
+    }
+
+    /// Mix four deck outputs into a stereo master output. Convenience wrapper
+    /// around `process_channel_eq_filter` + `combine`; the engine bypasses
+    /// this path so it can capture the intermediate post-EQ/filter signal for
+    /// Link Audio. Kept for backwards compatibility / tests.
+    pub fn mix(&mut self, deck_outputs: &[[f32; 2]; 4], output: &mut [f32; 2]) {
+        let mut processed = [[0.0f32; 2]; 4];
+        for (i, deck_out) in deck_outputs.iter().enumerate() {
+            let (l, r) = self.process_channel_eq_filter(i, deck_out[0], deck_out[1]);
+            processed[i] = [l, r];
+        }
+        self.combine(&processed, output);
     }
 
     pub fn decay_meters(&mut self, decay: f32) {

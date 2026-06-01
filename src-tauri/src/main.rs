@@ -75,6 +75,8 @@ struct EngineSnapshot {
     link_enabled: bool,
     link_audio_enabled: bool,
     link_peers: u64,
+    /// Link Audio send: true = raw deck (bypass EQ/filter), false = booth feed.
+    link_send_bypass_eq_filter: bool,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -447,6 +449,7 @@ fn get_engine_state(state: State<AppState>) -> Result<EngineSnapshot, String> {
         link_enabled: s.link_enabled,
         link_audio_enabled: s.link_audio_enabled,
         link_peers: s.link_peers,
+        link_send_bypass_eq_filter: s.link_send_bypass_eq_filter,
     })
 }
 
@@ -621,6 +624,17 @@ fn set_link_audio_enabled(enabled: bool, state: State<AppState>) -> Result<(), S
     Ok(())
 }
 
+/// Toggle whether the Link Audio send bypasses the channel EQ + filter.
+/// Default (false) is the booth feed — what the user hears, minus crossfader
+/// and master. True sends the raw deck output for peers to shape themselves.
+#[tauri::command]
+fn set_link_send_bypass_eq_filter(
+    bypass: bool,
+    state: State<AppState>,
+) -> Result<(), String> {
+    state.send(Command::SetLinkSendBypassEqFilter(bypass))
+}
+
 #[tauri::command]
 fn set_metronome(enabled: bool, state: State<AppState>) -> Result<(), String> {
     state.send(Command::SetMetronome(enabled))
@@ -738,6 +752,7 @@ fn main() {
             set_quantize,
             set_link_enabled,
             set_link_audio_enabled,
+            set_link_send_bypass_eq_filter,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

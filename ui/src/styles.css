@@ -865,7 +865,8 @@ input[type='range'].vol-fader::-webkit-slider-thumb {
 }
 
 .link-toggle,
-.link-audio-toggle {
+.link-audio-toggle,
+.link-bypass-toggle {
   background: var(--panel-2);
   border: 1px solid #2a2a44;
   color: var(--muted);
@@ -882,6 +883,17 @@ input[type='range'].vol-fader::-webkit-slider-thumb {
   background: var(--accent-b);
   border-color: var(--accent-b);
   color: #06222a;
+}
+
+.link-bypass-toggle.on {
+  background: var(--accent-a);
+  border-color: var(--accent-a);
+  color: white;
+}
+
+.link-bypass-toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* Misc -------------------------------------------------------------------- */

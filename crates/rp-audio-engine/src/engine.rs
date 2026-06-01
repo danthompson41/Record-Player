@@ -121,6 +121,12 @@ pub struct AudioEngine {
     pending_play: [Option<u64>; 4],
     /// Pending quantized cue jump per deck: (global-sample boundary, target frame).
     pending_seek: [Option<(u64, i64)>; 4],
+    /// When true, the Link Audio send broadcasts the raw deck output
+    /// (post-pitch/volume, pre-mixer). Default: the send is *post* EQ + filter,
+    /// matching the audible booth feed — bypass switches it to the raw cue
+    /// signal so remote peers receive an unprocessed channel they can shape
+    /// themselves.
+    link_send_bypass_eq_filter: bool,
 }
 
 impl AudioEngine {
@@ -149,6 +155,7 @@ impl AudioEngine {
             quantize: Quantize::Off,
             pending_play: [None; 4],
             pending_seek: [None; 4],
+            link_send_bypass_eq_filter: false,
         }
     }
 
@@ -287,6 +294,8 @@ impl AudioEngine {
 
             Command::SetMetronome(on) => self.metronome.enabled = on,
             Command::SetQuantize(q) => self.quantize = q,
+
+            Command::SetLinkSendBypassEqFilter(b) => self.link_send_bypass_eq_filter = b,
         }
     }
 
@@ -430,19 +439,41 @@ impl AudioEngine {
             self.decks[d].render(&mut deck_scratch[d], frames);
         }
 
+        // ─── Pre-process each deck through EQ + filter ───────────────────────
+        //
+        // We need the post-EQ/filter signal for both the Link Audio send (so
+        // remote peers hear the booth feed, not the dry cue) and the per-frame
+        // crossfader/master sum below. Running the biquads once here and
+        // re-using the result avoids double-processing.
+        let mut processed_scratch: [Vec<f32>; 4] = [
+            vec![0.0; frames * 2],
+            vec![0.0; frames * 2],
+            vec![0.0; frames * 2],
+            vec![0.0; frames * 2],
+        ];
+        for d in 0..4 {
+            for frame in 0..frames {
+                let l = deck_scratch[d][frame * 2];
+                let r = deck_scratch[d][frame * 2 + 1];
+                let (pl, pr) = self.mixer.process_channel_eq_filter(d, l, r);
+                processed_scratch[d][frame * 2] = pl;
+                processed_scratch[d][frame * 2 + 1] = pr;
+            }
+        }
+
         // ─── Broadcast per-deck audio over Link Audio ────────────────────────
         //
-        // Each deck publishes its post-resample / post-pitch / post-volume
-        // stereo signal to its own LinkAudio channel. The mixer's per-channel
-        // EQ/filter/crossfader/master are NOT applied — peers receive the raw
-        // deck output, which mirrors a traditional booth/PFL feed. Idle (no
-        // remote subscriber) is cheap: `retain_buffer` returns None and we
-        // bail out without converting samples.
+        // Default source is the post-EQ/filter signal (what the user hears in
+        // the booth, minus crossfader/master). Toggling
+        // `link_send_bypass_eq_filter` switches the send back to the raw deck
+        // output so peers can apply their own processing. Idle (no remote
+        // subscriber) is cheap: `retain_buffer` returns None and we bail.
         if link_enabled && self.link.is_link_audio_enabled() {
             if let Some(host_us) = link_host_us {
                 let beats_at_buffer_begin =
                     self.link_state.beat_at_time(host_us, LINK_QUANTUM);
                 let sample_rate = self.transport.sample_rate();
+                let bypass = self.link_send_bypass_eq_filter;
                 for d in 0..4 {
                     let Some(sink) = self.link_sinks[d].as_ref() else {
                         continue;
@@ -457,8 +488,13 @@ impl AudioEngine {
                         // this block rather than truncate misaligned audio.
                         continue;
                     }
+                    let src: &[f32] = if bypass {
+                        &deck_scratch[d][..needed]
+                    } else {
+                        &processed_scratch[d][..needed]
+                    };
                     let dst = &mut self.link_pcm_scratch[d][..needed];
-                    for (i, s) in deck_scratch[d][..needed].iter().enumerate() {
+                    for (i, s) in src.iter().enumerate() {
                         // f32 [-1, 1] → i16 with saturation. 32767 (not 32768)
                         // on the negative side mirrors libsndfile/cpal’s convention.
                         let clamped = s.clamp(-1.0, 1.0);
@@ -479,15 +515,15 @@ impl AudioEngine {
 
         // Mix decks and overlay the metronome, frame by frame.
         for frame in 0..frames {
-            let deck_samples: [[f32; 2]; 4] = [
-                [deck_scratch[0][frame * 2], deck_scratch[0][frame * 2 + 1]],
-                [deck_scratch[1][frame * 2], deck_scratch[1][frame * 2 + 1]],
-                [deck_scratch[2][frame * 2], deck_scratch[2][frame * 2 + 1]],
-                [deck_scratch[3][frame * 2], deck_scratch[3][frame * 2 + 1]],
+            let processed_samples: [[f32; 2]; 4] = [
+                [processed_scratch[0][frame * 2], processed_scratch[0][frame * 2 + 1]],
+                [processed_scratch[1][frame * 2], processed_scratch[1][frame * 2 + 1]],
+                [processed_scratch[2][frame * 2], processed_scratch[2][frame * 2 + 1]],
+                [processed_scratch[3][frame * 2], processed_scratch[3][frame * 2 + 1]],
             ];
 
             let mut mixed = [0.0f32; 2];
-            self.mixer.mix(&deck_samples, &mut mixed);
+            self.mixer.combine(&processed_samples, &mut mixed);
 
             if playing {
                 // Trigger a click at each beat boundary crossed in this frame.
@@ -508,6 +544,21 @@ impl AudioEngine {
 
             output[frame * 2] = mixed[0];
             output[frame * 2 + 1] = mixed[1];
+        }
+
+        // ─── Local output mute when broadcasting over Link Audio ─────────────
+        //
+        // When Link Audio is on, recordplayer is acting as the Link source —
+        // peers monitor the audio, and the local speakers should stay silent
+        // so the operator isn't doubling on a downstream monitor. The deck
+        // broadcast loop above ran on the pre-mute signal, so peers still get
+        // their full audio; only the cpal output is zeroed. Metronome and
+        // master peak meters were already computed before this point, so
+        // beat-dot animation and meter values keep working.
+        if link_enabled && self.link.is_link_audio_enabled() {
+            for s in output[..frames * 2].iter_mut() {
+                *s = 0.0;
+            }
         }
 
         // Advance the free-running clock.
@@ -567,6 +618,7 @@ impl AudioEngine {
             link_enabled: self.link.is_enabled(),
             link_audio_enabled: self.link.is_link_audio_enabled(),
             link_peers: self.link.num_peers(),
+            link_send_bypass_eq_filter: self.link_send_bypass_eq_filter,
         }
     }
 

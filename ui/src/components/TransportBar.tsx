@@ -19,6 +19,7 @@ export function TransportBar({ snapshot }: TransportBarProps) {
   const linkEnabled = snapshot?.link_enabled ?? false;
   const linkAudioEnabled = snapshot?.link_audio_enabled ?? false;
   const linkPeers = snapshot?.link_peers ?? 0;
+  const linkSendBypass = snapshot?.link_send_bypass_eq_filter ?? false;
 
   // Mirror the engine's authoritative BPM into the input while Link is engaged
   // — peers can change the tempo and we want the slider to follow.
@@ -60,6 +61,10 @@ export function TransportBar({ snapshot }: TransportBarProps) {
       api.setLinkEnabled(true);
     }
     api.setLinkAudioEnabled(!linkAudioEnabled);
+  };
+
+  const onLinkSendBypass = () => {
+    api.setLinkSendBypassEqFilter(!linkSendBypass);
   };
 
   return (
@@ -129,6 +134,19 @@ export function TransportBar({ snapshot }: TransportBarProps) {
         title="Link Audio — broadcast each deck as its own channel on the Link network"
       >
         LINK AUDIO
+      </button>
+
+      <button
+        className={`link-bypass-toggle ${linkSendBypass ? 'on' : ''}`}
+        onClick={onLinkSendBypass}
+        title={
+          linkSendBypass
+            ? 'Bypass on — broadcasting raw deck audio (pre EQ/filter)'
+            : 'Bypass off — broadcasting booth feed (post EQ/filter)'
+        }
+        disabled={!linkAudioEnabled}
+      >
+        EQ/FLT BYPASS
       </button>
     </div>
   );

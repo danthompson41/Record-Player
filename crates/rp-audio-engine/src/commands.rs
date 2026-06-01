@@ -55,6 +55,10 @@ pub enum Command {
     SetMetronome(bool),
     /// Set the quantization grid for deck-start scheduling.
     SetQuantize(Quantize),
+
+    /// Link Audio send routing: false (default) = post EQ/filter, true =
+    /// raw deck output. Local monitoring is unchanged either way.
+    SetLinkSendBypassEqFilter(bool),
 }
 
 /// Sender for commands (used by UI thread)
@@ -118,6 +122,9 @@ pub struct EngineState {
     pub link_audio_enabled: bool,
     /// Ableton Link: number of peers in the current session.
     pub link_peers: u64,
+    /// Link Audio send routing: true = raw deck output (EQ/filter bypassed
+    /// before the send), false = post-EQ/filter.
+    pub link_send_bypass_eq_filter: bool,
 }
 
 #[derive(Debug, Clone, Default)]

@@ -33,6 +33,8 @@ export interface EngineSnapshot {
   link_audio_enabled: boolean;
   /** Ableton Link: number of remote peers in the session. */
   link_peers: number;
+  /** Link Audio send: true = raw deck (bypass EQ/filter), false = booth feed. */
+  link_send_bypass_eq_filter: boolean;
 }
 
 export type Quantize = 'off' | 'beat' | 'bar';
@@ -111,6 +113,8 @@ export const api = {
   setLinkEnabled: (enabled: boolean) => invoke('set_link_enabled', { enabled }),
   setLinkAudioEnabled: (enabled: boolean) =>
     invoke('set_link_audio_enabled', { enabled }),
+  setLinkSendBypassEqFilter: (bypass: boolean) =>
+    invoke('set_link_send_bypass_eq_filter', { bypass }),
 };
 
 /** Format a sample count into mm:ss given a sample rate. */
